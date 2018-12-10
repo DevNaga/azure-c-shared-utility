@@ -15,6 +15,7 @@ extern "C" {
 #endif
 
 typedef struct CONSTBUFFER_ARRAY_HANDLE_DATA_TAG* CONSTBUFFER_ARRAY_HANDLE;
+#define PRI_CONSTBUFFER_ARRAY_HANDLE "%p"
 
 /*create*/
 MOCKABLE_FUNCTION(, CONSTBUFFER_ARRAY_HANDLE, constbuffer_array_create, const CONSTBUFFER_HANDLE*, buffers, uint32_t, buffer_count);

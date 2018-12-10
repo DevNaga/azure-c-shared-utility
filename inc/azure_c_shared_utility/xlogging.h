@@ -4,6 +4,7 @@
 #ifndef XLOGGING_H
 #define XLOGGING_H
 
+#include "macro_utils.h"
 #include "azure_c_shared_utility/agenttime.h"
 #include "azure_c_shared_utility/optimize_size.h"
 
@@ -118,6 +119,34 @@ typedef void(*LOGGER_LOG_GETLASTERROR)(const char* file, const char* func, int l
 #else
 #define LogInfo(FORMAT, ...) do{LOG(AZ_LOG_INFO, LOG_LINE, FORMAT, ##__VA_ARGS__); }while((void)0,0)
 #endif
+
+#define ARG_IN_FUNC_DEFINITION(count, arg_type, arg_name) \
+    arg_type arg_name IFCOMMA(count)
+
+#define PRI_int8_t PRId8
+#define PRI_int16_t PRId16
+#define PRI_int32_t PRId32
+#define PRI_int64_t PRId64
+#define PRI_uint8_t PRIu8
+#define PRI_uint16_t PRIu16
+#define PRI_uint32_t PRIu32
+#define PRI_uint64_t PRIu64
+
+#define PRINT_FORMAT(arg_type) \
+    C2(PRI_, arg_type)
+
+#define TEXT_ARG_IN_FUNC_DEFINITION(count, arg_type, arg_name) \
+    TOSTRING(arg_type) " " TOSTRING(arg_name) "=" get_logging_format(TOSTRING(arg_type))
+
+#define ARG_IN_LOG_CALL(count, arg_type, arg_name) \
+    arg_name IFCOMMA(count)
+
+#define FUNCTION_DEFINITION(return_type, name, ...) \
+static void C2(name, _log_invalid_args)(IF(COUNT_ARG(__VA_ARGS__),,void) FOR_EACH_2_COUNTED(ARG_IN_FUNC_DEFINITION, __VA_ARGS__)) \
+{ \
+    LogError(FOR_EACH_2_COUNTED(TEXT_ARG_IN_FUNC_DEFINITION, __VA_ARGS__), FOR_EACH_2_COUNTED(ARG_IN_LOG_CALL, __VA_ARGS__)); \
+} \
+return_type name(IF(COUNT_ARG(__VA_ARGS__),,void) FOR_EACH_2_COUNTED(ARG_IN_FUNC_DEFINITION, __VA_ARGS__))
 
 #ifdef WIN32
 extern void xlogging_LogErrorWinHTTPWithGetLastErrorAsStringFormatter(int errorMessageID);

@@ -24,7 +24,7 @@ typedef struct CONSTBUFFER_ARRAY_HANDLE_DATA_TAG
 
 DEFINE_REFCOUNT_TYPE(CONSTBUFFER_ARRAY_HANDLE_DATA);
 
-CONSTBUFFER_ARRAY_HANDLE constbuffer_array_create(const CONSTBUFFER_HANDLE* buffers, uint32_t buffer_count)
+FUNCTION_DEFINITION(CONSTBUFFER_ARRAY_HANDLE, constbuffer_array_create, const CONSTBUFFER_HANDLE*, buffers, uint32_t, buffer_count)
 {
     CONSTBUFFER_ARRAY_HANDLE result;
 
