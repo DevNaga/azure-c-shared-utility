@@ -139,12 +139,33 @@ typedef void(*LOGGER_LOG_GETLASTERROR)(const char* file, const char* func, int l
 #define PRINT_FORMAT(arg_type) \
     C2(PRI_, arg_type)
 
+extern void* xlogging_malloc(size_t size);
+extern void xlogging_free(void* ptr);
+
 static const char* get_logging_format(const char* type)
 {
     (void)type;
-    if (strcmp(type, "uint32_t") == 0)
+    size_t length = strlen(type);
+    if ((length > 0) &&
+        type[length - 1] == '*')
+    {
+        return "%p";
+    }
+    else if (strcmp(type, "uint32_t") == 0)
     {
         return "%" PRIu32;
+    }
+    else if (strcmp(type, "int32_t") == 0)
+    {
+        return "%" PRId32;
+    }
+    if (strcmp(type, "int") == 0)
+    {
+        return "%d";
+    }
+    else if (strcmp(type, "unsigned int") == 0)
+    {
+        return "%u";
     }
     else
     {
@@ -163,10 +184,10 @@ static char* xlogging_vsprintf_char(const char* format, va_list va)
     }
     else
     {
-        result = malloc(neededSize + 1);
+        result = xlogging_malloc(neededSize + 1);
         if (result == NULL)
         {
-            (void)printf("failure in malloc\n");
+            (void)printf("failure in xlogging_malloc\n");
             /*return as is*/
         }
         else
@@ -174,7 +195,7 @@ static char* xlogging_vsprintf_char(const char* format, va_list va)
             if (vsnprintf(result, neededSize + 1, format, va) != neededSize)
             {
                 (void)printf("inconsistent vsnprintf behavior\n");
-                free(result);
+                xlogging_free(result);
                 result = NULL;
             }
         }
@@ -236,7 +257,7 @@ static char* C2(name, _construct_log_invalid_args_format_string)(void) \
     } \
     else \
     { \
-        result = malloc(needed_length + 1); \
+        result = xlogging_malloc(needed_length + 1); \
         if (result != NULL) \
         { \
             (void)sprintf(result, "Invalid arguments: " FOR_EACH_2_COUNTED(TEXT_ARG_IN_CONSTRUCT_FORMAT, __VA_ARGS__) FOR_EACH_2_COUNTED(ARG_TYPE_IN_CONSTRUCT_FORMAT, __VA_ARGS__)); \
@@ -253,9 +274,9 @@ static void C2(name, _log_args)(va_list va) \
         if (log_text != NULL) \
         { \
             LogError("%s", log_text); \
-            free(log_text); \
+            xlogging_free(log_text); \
         } \
-        free(log_invalid_args_format); \
+        xlogging_free(log_invalid_args_format); \
     } \
 } \
 return_type C2(name, _code)(LOG_ARGS_FUNC log_args_func, va_list log_args_va, FOR_EACH_2_COUNTED(ARG_IN_FUNC_DEFINITION, __VA_ARGS__)); \

@@ -179,6 +179,16 @@ void xlogging_LogErrorWinHTTPWithGetLastErrorAsStringFormatter(int errorMessageI
 
 #endif // WIN32
 
+void* xlogging_malloc(size_t size)
+{
+    return malloc(size);
+}
+
+void xlogging_free(void* ptr)
+{
+    free(ptr);
+}
+
 
 #endif // NO_LOGGING
 
