@@ -34,8 +34,6 @@ FUNCTION_DEFINITION(CONSTBUFFER_ARRAY_HANDLE, constbuffer_array_create, const CO
         )
     {
         LOG_INVALID_ARGS();
-        LogError("Invalid arguments: const CONSTBUFFER_HANDLE* buffers=%p, uint32_t buffer_count=%" PRIu32,
-            buffers, buffer_count);
     }
     else
     {

@@ -5,6 +5,9 @@
 #define XLOGGING_H
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
+#include <inttypes.h>
 #include "macro_utils.h"
 #include "azure_c_shared_utility/agenttime.h"
 #include "azure_c_shared_utility/optimize_size.h"
@@ -139,43 +142,54 @@ typedef void(*LOGGER_LOG_GETLASTERROR)(const char* file, const char* func, int l
 static const char* get_logging_format(const char* type)
 {
     (void)type;
-    return "%p";
+    if (strcmp(type, "uint32_t") == 0)
+    {
+        return "%" PRIu32;
+    }
+    else
+    {
+        return "%p";
+    }
+}
+
+static char* xlogging_vsprintf_char(const char* format, va_list va)
+{
+    char* result;
+    int neededSize = vsnprintf(NULL, 0, format, va);
+    if (neededSize < 0)
+    {
+        (void)printf("failure in vsnprintf\n");
+        result = NULL;
+    }
+    else
+    {
+        result = malloc(neededSize + 1);
+        if (result == NULL)
+        {
+            (void)printf("failure in malloc\n");
+            /*return as is*/
+        }
+        else
+        {
+            if (vsnprintf(result, neededSize + 1, format, va) != neededSize)
+            {
+                (void)printf("inconsistent vsnprintf behavior\n");
+                free(result);
+                result = NULL;
+            }
+        }
+    }
+    return result;
 }
 
 #define TEXT_ARG_IN_CONSTRUCT_FORMAT(count, arg_type, arg_name) \
-    TOSTRING(arg_type) " " TOSTRING(arg_name) "=%s"
+    TOSTRING(arg_type) " " TOSTRING(arg_name) "=%s" IF(DEC(DEC(count)),", ",)
 
 #define ARG_TYPE_IN_CONSTRUCT_FORMAT(count, arg_type, arg_name) \
     , get_logging_format(TOSTRING(arg_type))
 
-#define ARG_IN_LOG_CALL(count, arg_type, arg_name) \
+#define ARG_AS_PARAM_IN_CALL(count, arg_type, arg_name) \
     arg_name IFCOMMA(count)
-
-#define CONSTRUCT_LOG_ERROR_FORMAT_STRING(...) \
-    char* log_error_format_str; \
-    int needed_length = sprintf(NULL, "Invalid arguments: " FOR_EACH_2_COUNTED(TEXT_ARG_IN_CONSTRUCT_FORMAT, __VA_ARGS__) FOR_EACH_2_COUNTED(ARG_TYPE_IN_CONSTRUCT_FORMAT, __VA_ARGS__)); \
-    if (needed_length > 0) \
-    { \
-        log_error_format_str = malloc(needed_length + 1); \
-        if (log_error_format_str != NULL) \
-        { \
-            (void)sprintf(log_error_format_str, "Invalid arguments: " FOR_EACH_2_COUNTED(TEXT_ARG_IN_CONSTRUCT_FORMAT, __VA_ARGS__) FOR_EACH_2_COUNTED(ARG_TYPE_IN_CONSTRUCT_FORMAT, __VA_ARGS__)); \
-        } \
-    }
-
-#define FUNCTION_DEFINITION(return_type, name, ...) \
-static void C2(name, _log_invalid_args)(int dummy, IF(COUNT_ARG(__VA_ARGS__),,void) FOR_EACH_2_COUNTED(ARG_IN_FUNC_DEFINITION, __VA_ARGS__)) \
-{ \
-    CONSTRUCT_LOG_ERROR_FORMAT_STRING(__VA_ARGS__); \
-    (void)dummy; \
-    vsprintf(NULL, log_error_format_str, )
-    LogError(log_error_format_str, FOR_EACH_2_COUNTED(ARG_IN_LOG_CALL, __VA_ARGS__)); \
-    free(log_error_format_str); \
-} \
-return_type name(IF(COUNT_ARG(__VA_ARGS__),,void) FOR_EACH_2_COUNTED(ARG_IN_FUNC_DEFINITION, __VA_ARGS__))
-
-#define LOG_INVALID_ARGS() \
-    C2(__FUNCTION__, _log_invalid_args)()
 
 #ifdef WIN32
 extern void xlogging_LogErrorWinHTTPWithGetLastErrorAsStringFormatter(int errorMessageID);
@@ -208,6 +222,60 @@ extern LOGGER_LOG_GETLASTERROR xlogging_get_log_function_GetLastError(void);
 #endif // WIN32
 
 #endif // _MSC_VER
+
+typedef void(*LOG_ARGS_FUNC)(va_list va);
+
+#define FUNCTION_DEFINITION(return_type, name, ...) \
+static char* C2(name, _construct_log_invalid_args_format_string)(void) \
+{ \
+    char* result; \
+    int needed_length = snprintf(NULL, 0, "Invalid arguments: " FOR_EACH_2_COUNTED(TEXT_ARG_IN_CONSTRUCT_FORMAT, __VA_ARGS__) FOR_EACH_2_COUNTED(ARG_TYPE_IN_CONSTRUCT_FORMAT, __VA_ARGS__)); \
+    if (needed_length <= 0) \
+    { \
+        result = NULL; \
+    } \
+    else \
+    { \
+        result = malloc(needed_length + 1); \
+        if (result != NULL) \
+        { \
+            (void)sprintf(result, "Invalid arguments: " FOR_EACH_2_COUNTED(TEXT_ARG_IN_CONSTRUCT_FORMAT, __VA_ARGS__) FOR_EACH_2_COUNTED(ARG_TYPE_IN_CONSTRUCT_FORMAT, __VA_ARGS__)); \
+        } \
+    } \
+    return result; \
+} \
+static void C2(name, _log_args)(va_list va) \
+{ \
+    char* log_invalid_args_format = C2(name, _construct_log_invalid_args_format_string)(); \
+    if (log_invalid_args_format != NULL) \
+    { \
+        char* log_text = xlogging_vsprintf_char((const char*)log_invalid_args_format, va); \
+        if (log_text != NULL) \
+        { \
+            LogError("%s", log_text); \
+            free(log_text); \
+        } \
+        free(log_invalid_args_format); \
+    } \
+} \
+return_type C2(name, _code)(LOG_ARGS_FUNC log_args_func, va_list log_args_va, FOR_EACH_2_COUNTED(ARG_IN_FUNC_DEFINITION, __VA_ARGS__)); \
+return_type C2(name, _with_dummy)(FOR_EACH_2_COUNTED(ARG_IN_FUNC_DEFINITION, __VA_ARGS__), int dummy, ...) \
+{ \
+    va_list va; \
+    return_type ret; \
+    va_start(va, dummy); \
+    ret = C2(name, _code)(C2(name, _log_args), va, FOR_EACH_2_COUNTED(ARG_AS_PARAM_IN_CALL, __VA_ARGS__)); \
+    va_end(va); \
+    return ret; \
+} \
+return_type name(FOR_EACH_2_COUNTED(ARG_IN_FUNC_DEFINITION, __VA_ARGS__)) \
+{ \
+    return C2(name, _with_dummy)(FOR_EACH_2_COUNTED(ARG_AS_PARAM_IN_CALL, __VA_ARGS__), 0, FOR_EACH_2_COUNTED(ARG_AS_PARAM_IN_CALL, __VA_ARGS__)); \
+} \
+return_type C2(name, _code)(LOG_ARGS_FUNC log_args_func, va_list log_args_va, FOR_EACH_2_COUNTED(ARG_IN_FUNC_DEFINITION, __VA_ARGS__))
+
+#define LOG_INVALID_ARGS() \
+    log_args_func(log_args_va)
 
 extern void LogBinary(const char* comment, const void* data, size_t size);
 
